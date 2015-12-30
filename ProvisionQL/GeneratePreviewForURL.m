@@ -206,6 +206,61 @@ NSDictionary *formattedDevicesData(NSArray *value) {
     return @{@"ProvisionedDevicesFormatted" : [devices copy], @"ProvisionedDevicesCount" : [NSString stringWithFormat:@"%zd Device%s", [array count], ([array count] == 1 ? "" : "s")]};
 }
 
+
+static NSString *serverHost(NSString *targetName, NSString *realPath)
+{
+    NSPipe *pipe = [NSPipe pipe];
+    NSTask *task = [[NSTask alloc] init];
+    task.currentDirectoryPath = realPath;
+    task.arguments = @[@"-c", [NSString stringWithFormat:@"strings %@ | grep -E \".sudiyi.cn|.sposter.net\"", targetName]];
+    task.standardOutput = pipe;
+    task.standardError = pipe;
+    task.launchPath = @"/bin/sh";
+    [task launch];
+    [task waitUntilExit];
+    
+    NSData *data = [pipe.fileHandleForReading readDataToEndOfFile];
+    if (nil != data) {
+        NSString *text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        if (nil != text) {
+            NSArray *arry = [text componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            arry = [NSSet setWithArray:arry].allObjects;
+            arry = [arry filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"length > 0"]];
+            text = [arry componentsJoinedByString:@", "];
+            return text;
+        }
+    }
+    
+    return nil;
+}
+
+static NSString *iConsoleDisabled(NSString *targetName, NSString *realPath)
+{
+    NSPipe *pipe2 = [NSPipe pipe];
+    NSTask *task2 = [[NSTask alloc] init];
+    task2.currentDirectoryPath = realPath;
+    task2.arguments = @[@"-c", [NSString stringWithFormat:@"nm %@ | grep -i \"iconsole\"", targetName]];
+    task2.standardOutput = pipe2;
+    task2.standardError = pipe2;
+    task2.launchPath = @"/bin/sh";
+    [task2 launch];
+    [task2 waitUntilExit];
+    
+    NSData *data2 = [pipe2.fileHandleForReading readDataToEndOfFile];
+    if (nil != data2) {
+        NSString *text = [[NSString alloc] initWithData:data2 encoding:NSUTF8StringEncoding];
+        if (nil != text) {
+            if ([text.lowercaseString containsString:@"iconsole"]) {
+                return @"NO";
+            } else {
+                return @"YES";
+            }
+        }
+    }
+    
+    return nil;
+}
+
 OSStatus GeneratePreviewForURL(void *thisInterface, QLPreviewRequestRef preview, CFURLRef url, CFStringRef contentTypeUTI, CFDictionaryRef options) {
     @autoreleasepool {
         // create temp directory
@@ -217,28 +272,43 @@ OSStatus GeneratePreviewForURL(void *thisInterface, QLPreviewRequestRef preview,
         NSURL *URL = (__bridge NSURL *)url;
         NSString *dataType = (__bridge NSString *)contentTypeUTI;
         NSData *provisionData = nil;
-        NSData *appPlist = nil;
         NSImage *appIcon = nil;
+        
+        NSString *serverHostDescription = nil;
+        NSString *iConsoleDescription = nil;
+        NSDictionary *appPropertyList = nil;
         
         if([dataType isEqualToString:kDataType_app]) {
             // get the embedded provisioning & plist for the iOS app
 			provisionData = [NSData dataWithContentsOfURL:[URL URLByAppendingPathComponent:@"embedded.mobileprovision"]];
-            appPlist = [NSData dataWithContentsOfURL:[URL URLByAppendingPathComponent:@"Info.plist"]];
+            appPropertyList = [NSPropertyListSerialization propertyListWithData:[NSData dataWithContentsOfURL:[URL URLByAppendingPathComponent:@"Info.plist"]] options:0 format:NULL error:NULL];
+            
+            NSString *targetName = appPropertyList[@"CFBundleExecutable"];
+            if (nil != targetName) {
+                serverHostDescription = serverHost(targetName, URL.path);
+                iConsoleDescription = iConsoleDisabled(targetName, URL.path);
+            }
 
         } else if([dataType isEqualToString:kDataType_ipa]) {
             // get the embedded provisioning & plist from an app archive using: unzip -u -j -d <currentTempDirFolder> <URL> <files to unzip>
             NSTask *unzipTask = [NSTask new];
 			[unzipTask setLaunchPath:@"/usr/bin/unzip"];
 			[unzipTask setStandardOutput:[NSPipe pipe]];
-			[unzipTask setArguments:@[@"-u", @"-j", @"-d", currentTempDirFolder, [URL path], @"Payload/*.app/embedded.mobileprovision", @"Payload/*.app/Info.plist"]];
+			[unzipTask setArguments:@[@"-u", @"-j", @"-n", @"-d", currentTempDirFolder, [URL path]]];
 			[unzipTask launch];
 			[unzipTask waitUntilExit];
             
             NSString *provisionPath = [currentTempDirFolder stringByAppendingPathComponent:@"embedded.mobileprovision"];
 			provisionData = [NSData dataWithContentsOfFile:provisionPath];
             NSString *plistPath = [currentTempDirFolder stringByAppendingPathComponent:@"Info.plist"];
-			appPlist = [NSData dataWithContentsOfFile:plistPath];
+            appPropertyList = [NSPropertyListSerialization propertyListWithData:[NSData dataWithContentsOfFile:plistPath] options:0 format:NULL error:NULL];
             
+            NSString *targetName = appPropertyList[@"CFBundleExecutable"];
+            if (nil != targetName) {
+                serverHostDescription = serverHost(targetName, currentTempDirFolder);
+                iConsoleDescription = iConsoleDisabled(targetName, currentTempDirFolder);
+            }
+
             [fileManager removeItemAtPath:tempDirFolder error:nil];
         } else {
             // use provisioning directly
@@ -268,8 +338,7 @@ OSStatus GeneratePreviewForURL(void *thisInterface, QLPreviewRequestRef preview,
         }
         
         if([dataType isEqualToString:kDataType_ipa] || [dataType isEqualToString:kDataType_app]) {
-            NSDictionary *appPropertyList = [NSPropertyListSerialization propertyListWithData:appPlist options:0 format:NULL error:NULL];
-            
+
             NSString *bundleName = [appPropertyList objectForKey:@"CFBundleDisplayName"];
             if(!bundleName) {
                 bundleName = [appPropertyList objectForKey:@"CFBundleName"];
@@ -292,6 +361,14 @@ OSStatus GeneratePreviewForURL(void *thisInterface, QLPreviewRequestRef preview,
             }
             [synthesizedInfo setObject:[platforms componentsJoinedByString:@", "] forKey:@"UIDeviceFamily"];
             
+            // MARK: ServerHost
+            synthesizedInfo[@"ServerHost"] = serverHostDescription ?: @"Unknown";
+            
+            
+            // MARK: iConsoleDisabled
+            synthesizedInfo[@"iConsoleDisabled"] = iConsoleDescription ?: @"Unknown";
+            
+            
             if(!appIcon) {
                 NSURL *iconURL = [[NSBundle bundleWithIdentifier:kPluginBundleId] URLForResource:@"defaultIcon" withExtension:@"png"];
                 appIcon = [[NSImage alloc] initWithContentsOfURL:iconURL];
@@ -300,7 +377,8 @@ OSStatus GeneratePreviewForURL(void *thisInterface, QLPreviewRequestRef preview,
             
             NSData *imageData = [appIcon TIFFRepresentation];
             NSBitmapImageRep *imageRep = [NSBitmapImageRep imageRepWithData:imageData];
-            imageData = [imageRep representationUsingType:NSPNGFileType properties:nil];
+            NSDictionary *properties = nil;
+            imageData = [imageRep representationUsingType:NSPNGFileType properties:properties];
             NSString *base64 = [imageData base64EncodedStringWithOptions:0];
             [synthesizedInfo setObject:base64 forKey:@"AppIcon"];
             [synthesizedInfo setObject:@"" forKey:@"AppInfo"];
