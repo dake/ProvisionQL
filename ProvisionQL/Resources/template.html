@@ -27,7 +27,21 @@
                 .info {
                     margin-left: 20px;
                 }
-                
+            
+               .info .subsection {
+                    display: inline-block;
+                    vertical-align: top;
+               }
+            
+                .info .list {
+                    padding-left: 20px;
+                }
+            
+                .info > .list {
+                    display: inline-block;
+                    padding-left: 0px;
+                }
+            
                 .floatLeft {
                     float: left;
                 }
@@ -101,9 +115,18 @@
 				BundleId: __CFBundleIdentifier__<br />
                 DeviceFamily: __UIDeviceFamily__<br />
                 iConsoleDisabled: __iConsoleDisabled__<br />
-				ServerHost: __ServerHost__</div>
+                SDK: __DTSDKName__<br />
+                Minimum OS Version: __MinimumOSVersion__<br />
+                <div class="subsection">App Transport Security:</div> __AppTransportSecurityFormatted__
+            </div>
             <br class="clear" />
         </div>
+        
+        <div class="__AppInfo__">
+            <h1>ServerHost</h1>
+            __ServerHost__<br />
+        </div>
+        
         
         <div class="fileInfo">
             <h2>File info</h2>
@@ -137,7 +160,7 @@
 			
 		</div>
         <div class="footer">
-            <p>ProvisionQL v__BundleVersion____DEBUG__ (<a href="https://github.com/ealeksandrov/ProvisionQL">Fork on GitHub</a>)</p>
+            <p>ProvisionQL v__BundleVersion____DEBUG__ (<a href="https://github.com/dake/ProvisionQL">Fork on GitHub</a>)</p>
         </div>
     </body>
 </html>
