@@ -210,7 +210,7 @@ static NSString *serverHost(NSString *targetName, NSString *realPath)
 {
     NSPipe *pipe = [NSPipe pipe];
     NSTask *task = [[NSTask alloc] init];
-    task.currentDirectoryPath = realPath;
+    task.currentDirectoryPath = realPath.stringByRemovingPercentEncoding;
     task.arguments = @[@"-c", [NSString stringWithFormat:@"strings %@ | grep -E \"http://|https://\"", targetName]];//@[@"-c", [NSString stringWithFormat:@"strings %@ | grep -E \".sudiyi.cn|.sposter.net\"", targetName]];
     task.standardOutput = pipe;
     task.standardError = pipe;
@@ -251,7 +251,7 @@ static NSString *iConsoleDisabled(NSString *targetName, NSString *realPath)
 {
     NSPipe *pipe2 = [NSPipe pipe];
     NSTask *task2 = [[NSTask alloc] init];
-    task2.currentDirectoryPath = realPath;
+    task2.currentDirectoryPath = realPath.stringByRemovingPercentEncoding;
     task2.arguments = @[@"-c", [NSString stringWithFormat:@"nm %@ | grep -i \"iconsole\"", targetName]];
     task2.standardOutput = pipe2;
     task2.standardError = pipe2;
@@ -331,7 +331,7 @@ OSStatus GeneratePreviewForURL(void *thisInterface, QLPreviewRequestRef preview,
             NSTask *unzipTask = [NSTask new];
 			[unzipTask setLaunchPath:@"/usr/bin/unzip"];
 			[unzipTask setStandardOutput:NSPipe.pipe];
-			[unzipTask setArguments:@[@"-unj", URL.resourceSpecifier, @"-x", @"*/Frameworks/*", @"*/PlugIns/*", @"*/*.bundle/*", @"*/*.lproj/*", @"*/*.momd/*", @"-d", currentTempDirFolder]];
+			[unzipTask setArguments:@[@"-unj", URL.resourceSpecifier.stringByRemovingPercentEncoding, @"-x", @"*/Frameworks/*", @"*/PlugIns/*", @"*/*.bundle/*", @"*/*.lproj/*", @"*/*.momd/*", @"-d", currentTempDirFolder]];
 			[unzipTask launch];
 			[unzipTask waitUntilExit];
             if (0 != unzipTask.terminationStatus) {
