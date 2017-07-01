@@ -249,10 +249,28 @@ static NSString *serverHost(NSString *targetName, NSString *realPath)
 
 static NSString *iConsoleDisabled(NSString *targetName, NSString *realPath)
 {
+    NSPipe *pipe = [NSPipe pipe];
+    NSTask *task = [[NSTask alloc] init];
+    task.currentDirectoryPath = realPath.stringByRemovingPercentEncoding;
+    task.arguments = @[@"-c", [NSString stringWithFormat:@"nm %@ | grep -i \"iconsole\"", targetName]];
+    task.standardOutput = pipe;
+    task.standardError = pipe;
+    task.launchPath = @"/bin/sh";
+    [task launch];
+    [task waitUntilExit];
+    
+    NSData *data = [pipe.fileHandleForReading readDataToEndOfFile];
+    if (nil != data) {
+        NSString *text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        if ([text.lowercaseString containsString:@"iconsole"]) {
+            return @"NO";
+        }
+    }
+    
     NSPipe *pipe2 = [NSPipe pipe];
     NSTask *task2 = [[NSTask alloc] init];
     task2.currentDirectoryPath = realPath.stringByRemovingPercentEncoding;
-    task2.arguments = @[@"-c", [NSString stringWithFormat:@"nm %@ | grep -i \"iconsole\"", targetName]];
+    task2.arguments = @[@"-c", [NSString stringWithFormat:@"strings %@ | grep -i \"iconsole\"", targetName]];
     task2.standardOutput = pipe2;
     task2.standardError = pipe2;
     task2.launchPath = @"/bin/sh";
@@ -262,16 +280,12 @@ static NSString *iConsoleDisabled(NSString *targetName, NSString *realPath)
     NSData *data2 = [pipe2.fileHandleForReading readDataToEndOfFile];
     if (nil != data2) {
         NSString *text = [[NSString alloc] initWithData:data2 encoding:NSUTF8StringEncoding];
-        if (nil != text) {
-            if ([text.lowercaseString containsString:@"iconsole"]) {
-                return @"NO";
-            } else {
-                return @"YES";
-            }
+        if ([text.lowercaseString containsString:@"iconsole"]) {
+            return @"NO";
         }
     }
     
-    return nil;
+    return @"YES";
 }
 
 static NSString *formattedDictionaryWithReplacements(NSDictionary *dictionary, NSDictionary *replacements) {
